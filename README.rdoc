@@ -1,3 +1,5 @@
+Note: The following instructions can help with multiple openid storage, but Windows Live ID isn't yet supported ;-)
+
 = Some tips for using Authlogic OpenID (original instructions follow this)
 
 What's neat about authlogic_openid, which Railscast 170 doesn't cover, is that it can support multiple OpenIDs out of the box. Here's how:
@@ -17,6 +19,7 @@ Next let's modify our User and Profile models adding `belongs_to :profile` and `
   class User < ActiveRecord::Base
     belongs_to :profile
 
+    validates_uniqueness_of_login_field_options validates_uniqueness_of_login_field_options.merge(:if => :validate_password_with_openid?)
     validates_length_of_login_field_options validates_length_of_login_field_options.merge(:if => :validate_password_with_openid?)
     validates_format_of_login_field_options validates_format_of_login_field_options.merge(:if => :validate_password_with_openid?)
 
@@ -75,20 +78,26 @@ Your UsersController might then have this method:
 
   def create
     @user = User.new(params[:user])
-    if(current_user)
-      @user.profile = current_user.profile
-    end
-    @user.save do |result|
-      if result
-        flash[:notice] = "Registration successful."
-        redirect_to root_url
-      else
-        render :action => 'new'
+    if(!current_user && params[:user] && params[:user][:openid_identifier] && User.find_by_openid_identifier(params[:user][:openid_identifier]))
+      # This is so that if the OpenID exists as a User, we authenticate rather than register.
+      redirect_to "/login/other?openid_identifier=#{params[:user][:openid_identifier]}"
+      # The above redirect must be a GET request which is why it looks odd.
+    else
+      if(current_user)
+        @user.profile = current_user.profile
+      end
+      @user.save do |result|
+        if result
+          flash[:notice] = "Registration successful."
+          redirect_to root_url
+        else
+          render :action => 'new'
+        end
       end
     end
   end
 
-This way you can easily add other OpenIDs to your profile when signed-in.
+This way you can easily add other OpenIDs to your profile when signed-in. I also added a bit of code to redirect if an ID already exists as a user. This way the Registration page can be somewhat used as a sign-in page. (I can't replace it with the sign-in page, as you would still want to say "username taken" rather than "password incorrect")
 
 = Authlogic OpenID
 
