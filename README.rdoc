@@ -2,71 +2,93 @@
 
 What's neat about authlogic_openid, which Railscast 170 doesn't cover, is that it can support multiple OpenIDs out of the box. Here's how:
 
-Because we're using multiple OpenIDs, we need a new Login model to replace `openid_identifier`:
+Rather than my earlier attempt at turning User into a profile and using multiple Login objects to store OpenIDs, we'll do the sensible thing and instead have multiple USERS -- objects that act_as_authentic -- and one Profile model that has_many USERs.
 
-  script/generate model Login identifier:string
+To start with, we'll generate the Profile object:
 
-Next let's modify our User and Login models adding `has_many :logins` and `belongs_to :user`. One more change, we'll add a method called `find_by_openid_identifier` to User, to override how the authlogic code does lookups.
+  script/generate model Profile first_name:string last_name:string email:string
 
-  class Login < ActiveRecord::Base
-    belongs_to :user
+Next let's modify our User and Profile models adding `belongs_to :profile` and `has_many :users`. Two more changes: We'll have to remove the username validation if we want to make one-click OpenID registration, and we'll want to update our `map_openid_registration` function to create a profile and/or update it. (I'm not sure how well the `map_openid_registration` code works, though it has created a profile each time so far...)
+
+  class Profile < ActiveRecord::Base
+    has_many :users
   end
 
   class User < ActiveRecord::Base
-    has_many :logins
-  
+    belongs_to :profile
+
+    validates_length_of_login_field_options validates_length_of_login_field_options.merge(:if => :validate_password_with_openid?)
+    validates_format_of_login_field_options validates_format_of_login_field_options.merge(:if => :validate_password_with_openid?)
+
     acts_as_authentic do |c|
       c.openid_required_fields = [:nickname, :fullname, "http://axschema.org/namePerson/first", 
         "http://axschema.org/namePerson/last", :email, 'http://schema.openid.net/contact/email']
     end
-    
-    def self.find_by_openid_identifier(identifier)
-      Login.find_by_identifier(identifier).user
-    end
-    
+
     private
-  
-    def attributes_to_save
-      # ...
-    end
-  
+
     def map_openid_registration(registration)
-      # ...
+      unless self.profile
+        self.profile = Profile.new
+      end
+      self.profile.email = registration["email"] || registration["http://schema.openid.net/contact/email"].to_s if self.profile.email.blank?
+      self.profile.first_name = (registration[:fullname].split(" ").first if registration[:fullname]) || registration["http://axschema.org/namePerson/first"].to_s || registration["nickname"] || email.to_s[/[^@]*/] if self.profile.first_name.blank?
+      self.profile.last_name = (registration[:fullname].split(" ").last if registration[:fullname]) || registration["http://axschema.org/namePerson/last"].to_s if self.profile.last_name.blank?
     end
   end
 
-Then open the generated `create_logins.rb` migration and change it to something like:
+Then open the generated `create_profiles.rb` migration and change it to something like:
 
-  class CreateLogins < ActiveRecord::Migration
+  class CreateProfiles < ActiveRecord::Migration
     def self.up
-      create_table :logins do |t|
-        t.string :identifier
-        t.integer :user_id
+      create_table :profiles do |t|
+        t.string :first_name
+        t.string :last_name
+        t.string :email
+        t.timestamps
       end
-      add_index :logins, :identifier
-      add_index :logins, :user_id
-      User.find(:all).each do |user|
-        unless user.openid_identifier.blank?
-          user.logins << Login.new do |l|
-            l.identifier = user.openid_identifier
-          end
-          user.save
-        end
+      add_column :users, :profile_id, :integer
+      User.find(:all).each do |u|
+        u.profile = Profile.create(
+          :first_name => u.first_name,
+          :last_name => u.last_name,
+          :email => u.email
+        )
       end
-      remove_column :users, :openid_identifier
+      remove_column :users, :first_name
+      remove_column :users, :last_name
+      remove_column :users, :email
     end
 
     def self.down
-      remove_index :logins, :identifier
-      remove_index :logins, :user_id
-      drop_table :logins
-      add_column :users, :openid_identifier, :string
+      remove_column :users, :profile_id
+      add_column :users, :first_name, :string
+      add_column :users, :last_name, :string
+      add_column :users, :email, :string
+      drop_table :profiles
     end
   end
 
-The above migration should port over all existing OpenIDs. (It worked for me, at least) Just make sure you've made the right changes to Login and User first.
+The above migration should port over all existing profile data, though I haven't tested that function yet myself.
 
+Your UsersController might then have this method:
 
+  def create
+    @user = User.new(params[:user])
+    if(current_user)
+      @user.profile = current_user.profile
+    end
+    @user.save do |result|
+      if result
+        flash[:notice] = "Registration successful."
+        redirect_to root_url
+      else
+        render :action => 'new'
+      end
+    end
+  end
+
+This way you can easily add other OpenIDs to your profile when signed-in.
 
 = Authlogic OpenID
 
