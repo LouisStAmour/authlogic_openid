@@ -1,3 +1,73 @@
+= Some tips for using Authlogic OpenID (original instructions follow this)
+
+What's neat about authlogic_openid, which Railscast 170 doesn't cover, is that it can support multiple OpenIDs out of the box. Here's how:
+
+Because we're using multiple OpenIDs, we need a new Login model to replace `openid_identifier`:
+
+  script/generate model Login identifier:string
+
+Next let's modify our User and Login models adding `has_many :logins` and `belongs_to :user`. One more change, we'll add a method called `find_by_openid_identifier` to User, to override how the authlogic code does lookups.
+
+  class Login < ActiveRecord::Base
+    belongs_to :user
+  end
+
+  class User < ActiveRecord::Base
+    has_many :logins
+  
+    acts_as_authentic do |c|
+      c.openid_required_fields = [:nickname, :fullname, "http://axschema.org/namePerson/first", 
+        "http://axschema.org/namePerson/last", :email, 'http://schema.openid.net/contact/email']
+    end
+    
+    def self.find_by_openid_identifier(identifier)
+      Login.find_by_identifier(identifier).user
+    end
+    
+    private
+  
+    def attributes_to_save
+      # ...
+    end
+  
+    def map_openid_registration(registration)
+      # ...
+    end
+  end
+
+Then open the generated `create_logins.rb` migration and change it to something like:
+
+  class CreateLogins < ActiveRecord::Migration
+    def self.up
+      create_table :logins do |t|
+        t.string :identifier
+        t.integer :user_id
+      end
+      add_index :logins, :identifier
+      add_index :logins, :user_id
+      User.find(:all).each do |user|
+        unless user.openid_identifier.blank?
+          user.logins << Login.new do |l|
+            l.identifier = user.openid_identifier
+          end
+          user.save
+        end
+      end
+      remove_column :users, :openid_identifier
+    end
+
+    def self.down
+      remove_index :logins, :identifier
+      remove_index :logins, :user_id
+      drop_table :logins
+      add_column :users, :openid_identifier, :string
+    end
+  end
+
+The above migration should port over all existing OpenIDs. (It worked for me, at least) Just make sure you've made the right changes to Login and User first.
+
+
+
 = Authlogic OpenID
 
 Authlogic OpenID is an extension of the Authlogic library to add OpenID support. Authlogic v2.0 introduced an enhanced API that makes "plugging in" alternate authentication methods as easy as installing a gem.
