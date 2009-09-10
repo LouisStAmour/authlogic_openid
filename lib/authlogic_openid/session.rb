@@ -34,8 +34,10 @@ module AuthlogicOpenid
       def self.included(klass)
         klass.class_eval do
           attr_reader :openid_identifier
+          attr_accessor :wll_id
           validate :validate_openid_error
           validate :validate_by_openid, :if => :authenticating_with_openid?
+          validate :validate_by_wll_id, :if => :authenticating_with_wll_id?
         end
       end
       
@@ -55,7 +57,7 @@ module AuthlogicOpenid
         @openid_error = e.message
       end
       
-      # Cleaers out the block if we are authenticating with OpenID, so that we can redirect without a DoubleRender
+      # Clears out the block if we are authenticating with OpenID, so that we can redirect without a DoubleRender
       # error.
       def save(&block)
         block = nil if !openid_identifier.blank?
@@ -65,6 +67,10 @@ module AuthlogicOpenid
       private
         def authenticating_with_openid?
           attempted_record.nil? && errors.empty? && (!openid_identifier.blank? || (controller.params[:open_id_complete] && controller.params[:for_session]))
+        end
+        
+        def authenticating_with_wll_id?
+          !wll_id.blank?
         end
         
         def find_by_openid_identifier_method
@@ -86,6 +92,10 @@ module AuthlogicOpenid
               return
             end
           end
+        end
+        
+        def validate_by_wll_id
+          self.attempted_record = User.find_or_create_by_wll_id(wll_id)
         end
         
         def validate_openid_error
