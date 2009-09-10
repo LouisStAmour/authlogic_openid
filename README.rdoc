@@ -1,10 +1,10 @@
 = Introduction
 
-You'll need to git clone this version of the code, as after spending hours trying to override methods, I realized the simplest way to support other types of logins would be to add other fields to the User model, such as `wll_id`.
+You'll need to git clone this version of the code, as after spending hours trying to override methods, I realized the simplest way to support other types of logins would be to add other fields to the User model, such as <tt>wll_id</tt>.
 
-LICENSING WARNING: windowslivelogin.rb included in this fork might be protected by the "Windows Live SDK License Agreement" at http://msdn.microsoft.com/en-us/library/bb226715.aspx which you must accept to use the SDK. It restricts code, at least sample code, from being redistributed under a license that requires open source distribution. I believe then that an MIT license is appropriate, however given that the MIT license is easily the less restrictive of the two, I may be required to license this code not as MIT but as Windows Live SDK protected -- or at least that one file and these instructions.
+LICENSING WARNING: windowslivelogin.rb included in this fork might be protected by the <b>Windows Live SDK License Agreement</b> at http://msdn.microsoft.com/en-us/library/bb226715.aspx which you must accept to use the SDK. It restricts code, at least sample code, from being redistributed under a license that requires open source distribution. I believe then that an MIT license is appropriate, however given that the MIT license is easily the less restrictive of the two, I may be required to license this code not as MIT but as Windows Live SDK protected -- or at least that one file and these instructions.
 
-See below for my way of doing multiple logins, this builds on that in some ways -- such as by assuming that all User model fields are optional within my `User.find_or_create_by_wll_id` within the UserSession validation. I also added a has_profile method to ensure that all created Users have profiles, even if blank. (I updated the example User model code below to reflect that.)
+See below for my way of doing multiple logins, this builds on that in some ways -- such as by assuming that all User model fields are optional within my <tt>User.find_or_create_by_wll_id</tt> within the UserSession validation. I also added a has_profile method to ensure that all created Users have profiles, even if blank. (I updated the example User model code below to reflect that.)
 
 The only problems I'm having now with the code is what to do about multiple profiles / merging them, and trying to de-couple the idea of registering with the idea of signing in. When someone signs in with an OpenID or Windows Live, the User should be automatically created if it doesn't exist and associated with the current profile. If the ID or User already exists, but you're signed in under a different profile, then it has to merge the profiles, likely out of scope for this module. Even registering then, could be as simple as clicking a Register option on the login form rather than Login. My User controller seems less and less useful, except in creating additional logins without signing in. Another concern I just realised is "adding" Windows Live IDs to an existing profile. If you're signed in already, and you sign in as Windows Live, the Windows Live session must replace your current session, since sign-out must then be handled by Windows Live. To be more precise, the user and expiry must change ... I'll have to look into this further. (Now I see the value of tests :p)
 
@@ -30,11 +30,11 @@ Here's what Application-Key.yml looks like, it's based off of the sample Applica
   :securityalgorithm: wsignin1.0
   
 
-There's a blank line below `:securityalgorithm: wsignin1.0`. DON'T COPY AND PASTE THE ABOVE SAMPLE! It won't work, you have to replace the appid and secret with your own registered appid and secret. Again, save the file to your Root folder as `Application-Key.yml`, or put it in a safe spot. The idea is that you decrypt the response from Microsoft with your secret key, this way Microsoft knows your app is the only one that can understand the unique ID embedded in the returned token, and in return, you know the ID came from Microsoft and not through a third-party man-in-the-middle attack. This is only as secure as your secret key, however, so keep it safe and away from prying eyes.
+There's a blank line below <tt>:securityalgorithm: wsignin1.0</tt>. DON'T COPY AND PASTE THE ABOVE SAMPLE! It won't work, you have to replace the appid and secret with your own registered appid and secret. Again, save the file to your Root folder as <tt>Application-Key.yml</tt>, or put it in a safe spot. The idea is that you decrypt the response from Microsoft with your secret key, this way Microsoft knows your app is the only one that can understand the unique ID embedded in the returned token, and in return, you know the ID came from Microsoft and not through a third-party man-in-the-middle attack. This is only as secure as your secret key, however, so keep it safe and away from prying eyes.
 
-We are now nearly done, all we have to do is add the login/logout iframe to `layouts/application.html.erb` and modify our `UserSession` controller to handle redirects from Windows Live after sign-in or sign-out. Unlike OpenID, the iframe loading on each page means we do not handle the "Sign in" or "Sign out" clicks and we only know the button is pressed after the sign-in has occurred or during the sign out, when the browser loads an image from us to tell us to clear cookies. (Yes, when someone signs out of Windows Live, they are supposed to sign out of all Windows Live properties, including us and Hotmail. This also means we'll want to hide our sign out button when we are signed in through Windows Live.)
+We are now nearly done, all we have to do is add the login/logout iframe to <tt>layouts/application.html.erb</tt> and modify our <tt>UserSession</tt> controller to handle redirects from Windows Live after sign-in or sign-out. Unlike OpenID, the iframe loading on each page means we do not handle the "Sign in" or "Sign out" clicks and we only know the button is pressed after the sign-in has occurred or during the sign out, when the browser loads an image from us to tell us to clear cookies. (Yes, when someone signs out of Windows Live, they are supposed to sign out of all Windows Live properties, including us and Hotmail. This also means we'll want to hide our sign out button when we are signed in through Windows Live.)
 
-So below is my sample code from `application.html.erb` -- all the relevant bits say `WLL_CONFIG` near them:
+So below is my sample code from <tt>application.html.erb</tt> -- all the relevant bits say <tt>WLL_CONFIG</tt> near them:
 
   <%- if current_user -%>
     Hello <%= current_user.profile.first_name || "Anonymous" %>! You can 
@@ -63,7 +63,7 @@ So below is my sample code from `application.html.erb` -- all the relevant bits 
   
 You'll note the iframe src points to WebAuthButton.htm which is a self-contained badge that says "Sign in" or "Sign out" -- for all options, see http://msdn.microsoft.com/en-us/library/bb676638.aspx (The other two are somewhat ugly looking bits of text more appropriate for cases where Windows Live is the only authentication mechanism used.)
 
-On to `user_sessions_controller.rb` where in the `create` method or something based on it, before the usual `@user_session.save`, I have:
+On to <tt>user_sessions_controller.rb</tt> where in the <tt>create</tt> method or something based on it, before the usual <tt>@user_session.save</tt>, I have:
 
   wll = WindowsLiveLogin.new(WLL_CONFIG[:appid], WLL_CONFIG[:secret], WLL_CONFIG[:securityalgorithm])
   if request.request_parameters[:action] == "login" # The user has completed a successful sign-in to your site. 
@@ -133,9 +133,9 @@ On to `user_sessions_controller.rb` where in the `create` method or something ba
 
   end
 
-Note the use of `request.request_parameters[:action]` or `request.query_parameters[:action] == "logout"` -- this is because params[:action] is of course overridden to say `create` or whatever the Rails action is. Instead, we need to look at the original request_parameters (POST) or query_parameters (GET) to see what Windows Live tells us to do: "login" (redirects like normal), "clearcookie" (returns GIF), or "logout" (redirects like normal).
+Note the use of <tt>request.request_parameters[:action]</tt> or <tt>request.query_parameters[:action] == "logout"</tt> -- this is because params[:action] is of course overridden to say <tt>create</tt> or whatever the Rails action is. Instead, we need to look at the original request_parameters (POST) or query_parameters (GET) to see what Windows Live tells us to do: "login" (redirects like normal), "clearcookie" (returns GIF), or "logout" (redirects like normal).
 
-Okay, now you've a working Windows Live ID setup. See, wasn't that easy? For people confused about what to do with these files, just put them in `vendor/plugins`, e.g. `vendor/plugins/authlogic_openid/lib/windowslivelogin.rb` ... it doesn't need to be a gem to work. (In fact, that's the only way I've tested it so far, I'm clueless at gem packaging)
+Okay, now you've a working Windows Live ID setup. See, wasn't that easy? For people confused about what to do with these files, just put them in <tt>vendor/plugins</tt>, e.g. <tt>vendor/plugins/authlogic_openid/lib/windowslivelogin.rb</tt> ... it doesn't need to be a gem to work. (In fact, that's the only way I've tested it so far, I'm clueless at gem packaging)
 
 = Some tips for using Authlogic OpenID (original instructions follow this)
 
@@ -147,7 +147,7 @@ To start with, we'll generate the Profile object:
 
   script/generate model Profile first_name:string last_name:string email:string
 
-Next let's modify our User and Profile models adding `belongs_to :profile` and `has_many :users`. Two more changes: We'll have to remove the username validation if we want to make one-click OpenID registration, and we'll want to update our `map_openid_registration` function to create a profile and/or update it. (I'm not sure how well the `map_openid_registration` code works, though it has created a profile each time so far...)
+Next let's modify our User and Profile models adding <tt>belongs_to :profile</tt> and <tt>has_many :users</tt>. Two more changes: We'll have to remove the username validation if we want to make one-click OpenID registration, and we'll want to update our <tt>map_openid_registration</tt> function to create a profile and/or update it. (I'm not sure how well the <tt>map_openid_registration</tt> code works, though it has created a profile each time so far...)
 
   class Profile < ActiveRecord::Base
     has_many :users
@@ -184,7 +184,7 @@ Next let's modify our User and Profile models adding `belongs_to :profile` and `
     end
   end
 
-Then open the generated `create_profiles.rb` migration and change it to something like:
+Then open the generated <tt>create_profiles.rb</tt> migration and change it to something like:
 
   class CreateProfiles < ActiveRecord::Migration
     def self.up
