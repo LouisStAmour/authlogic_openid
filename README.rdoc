@@ -1,4 +1,117 @@
-= Introduction
+= Latest update: Facebook Connect logins
+
+(These were posted in reverse order. If you came here from Railscast 160 and Railscast 170, start at the bottom of this README and work your way up.)
+
+First we'll need the Facebooker plugin:
+
+  script/plugin install git://github.com/mmangino/facebooker.git
+
+Two things the readme says you can add to your application controller:
+
+  ensure_application_is_installed_by_facebook_user
+  # optional - ensures users have added the application in facebook to ensure access all of facebooker‘s features.
+  
+  filter_parameter_logging :fb_sig_friends
+  # recommended - prevents a violation of Facebook Terms of Service while reducing log bloat
+
+If you get a <tt>Facebooker::AdapterBase::UnableToLoadAdapter</tt> error like I did after installing Facebooker, it's because you haven't configured <tt>config/facebooker.yml</tt> yet. So open it up and add the relevant info from your Facebook app signup -- see http://wiki.developers.facebook.com/index.php/Connect/Setting_Up_Your_Site
+
+An example facebooker.yml file: (Obviously you MUST replace the api_key and secret_key.)
+
+  development:
+    api_key: a123b4567890b1cde23f456ghi7jk89l
+    secret_key: a1234567bc8d9ef0g1h23i456789j01k
+    canvas_page_name:
+    callback_url: http://localhost:3000/
+    pretty_errors: true
+    set_asset_host_to_callback_url: false
+    api: new
+    tunnel:
+      public_host_username: 
+      public_host: 
+      public_port: 4007
+      local_port: 3000
+      server_alive_interval: 0
+
+Okay, back to our terminal work:
+
+  script/generate xd_receiver
+  script/generate migration AddFacebookFieldsToUser fb_user_id:integer email_hash:string
+
+The first command creates cross-domain receiver files for Facebook callbacks. The second creates a migration, which we need to edit to say:
+
+  class AddFacebookFieldsToUser < ActiveRecord::Migration
+    def self.up
+      add_column :users, :fb_user_id, :integer, :limit => 8
+      add_column :users, :email_hash, :string
+    end
+
+    def self.down
+      remove_column :users, :email_hash
+      remove_column :users, :fb_user_id
+    end
+  end
+
+The :limit => 8 makes the :integer act as a bigint where possible.
+
+  rake db:migrate
+
+Now we modify <tt>application.html.erb</tt> to add the Facebook Connect JavaScript and so on.
+
+Just before the <tt></body></tt> (to speed up HTML loading), add:
+
+  <%= javascript_include_tag :defaults%>
+  <%= fb_connect_javascript_tag %>
+  <%= init_fb_connect %>
+  
+And where you want the Facebook Connect sign in / sign out to be, you can put code like the following:
+
+  <%- if current_user && current_user.fb_user_id -%>
+  <fb:profile-pic uid="<%= current_user.fb_user_id %>" facebook-logo="true" size="thumb" ></fb:profile-pic>
+  <p><a href="#" onclick='FB.Connect.logoutAndRedirect("/logout")'>Logout of Facebook Connect</a></p>
+  <%- else -%>
+  <%= fb_login_button('window.location = "/login/Facebook";')%>
+  <%- end -%>
+
+This assumes routes (and related methods) like:
+
+  map.login "login", :controller => "user_sessions", :action => "new"
+  map.login_with "login/:service", :controller => "user_sessions", :action => "create"
+  map.logout "logout", :controller => "user_sessions", :action => "destroy"
+
+This is perhaps not the smartest way to process Facebook logins, but it does seem to get the job done. I think I'll try refactoring next however, or rethinking this whole use of authlogic. Plus, profile merging is still bugging me.
+
+Here's some code I used for profiles - on the show profile page:
+
+  <p>
+    <strong>Sign-in IDs:</strong>
+  </p>
+  <ul>
+  <%- @profile.users.each do |u| -%>
+    <li><%=h "OpenID: #{u.openid_identifier}" if u.openid_identifier %>
+    <%=h "Windows Live (Internal ID: #{u.wll_id})" if u.wll_id %>
+    <%=h "Facebook Connect (Internal ID: #{u.fb_user_id})" if u.fb_user_id %></li>
+  <%- end -%>
+  </ul>
+  <p>
+    <%= link_to "Add another Sign-in ID", new_user_path %>
+  </p>
+
+And in the <tt>ProfilesController</tt>:
+
+  def destroy
+    @profile = current_user.profile
+    @profile.users.each do |u|
+      u.destroy
+    end
+    @profile.destroy
+    flash[:notice] = "Successfully destroyed profile."
+    redirect_to profiles_url
+  end
+
+Now I have to figure out also how to explain "multiple login IDs" to my users. I think I'll read up on Google's OpenID usability studies. Certainly, if I didn't know better, faced with logging in through 3 different options, I might randomly pick each time and get it wrong 3 times in a row, not knowing I should have associated all three login types the first time I logged in. Maybe I need a wizard of some kind. Or make it clearer which account they've logged in as, for when they return to the site later and have to pick again.
+
+= Introduction to the Windows Live ID commit from earlier
 
 You'll need to git clone this version of the code, as after spending hours trying to override methods, I realized the simplest way to support other types of logins would be to add other fields to the User model, such as <tt>wll_id</tt>.
 
@@ -156,9 +269,6 @@ Next let's modify our User and Profile models adding <tt>belongs_to :profile</tt
   class User < ActiveRecord::Base
     belongs_to :profile
 
-    validates_uniqueness_of_login_field_options validates_uniqueness_of_login_field_options.merge(:if => :validate_password_with_openid?)
-    validates_length_of_login_field_options validates_length_of_login_field_options.merge(:if => :validate_password_with_openid?)
-    validates_format_of_login_field_options validates_format_of_login_field_options.merge(:if => :validate_password_with_openid?)
     validate :has_profile
 
     acts_as_authentic do |c|

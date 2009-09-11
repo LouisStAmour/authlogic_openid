@@ -35,9 +35,11 @@ module AuthlogicOpenid
         klass.class_eval do
           attr_reader :openid_identifier
           attr_accessor :wll_id
+          attr_accessor :fb_user_id
           validate :validate_openid_error
           validate :validate_by_openid, :if => :authenticating_with_openid?
           validate :validate_by_wll_id, :if => :authenticating_with_wll_id?
+          validate :validate_by_fb_user_id, :if => :authenticating_with_fb_user_id?
         end
       end
       
@@ -73,6 +75,10 @@ module AuthlogicOpenid
           !wll_id.blank?
         end
         
+        def authenticating_with_fb_user_id?
+          !fb_user_id.blank?
+        end
+        
         def find_by_openid_identifier_method
           self.class.find_by_openid_identifier_method
         end
@@ -96,6 +102,10 @@ module AuthlogicOpenid
         
         def validate_by_wll_id
           self.attempted_record = User.find_or_create_by_wll_id(wll_id)
+        end
+        
+        def validate_by_fb_user_id
+          self.attempted_record = User.find_or_create_by_fb_user_id(fb_user_id)
         end
         
         def validate_openid_error

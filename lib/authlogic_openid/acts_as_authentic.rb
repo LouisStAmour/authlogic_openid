@@ -44,7 +44,12 @@ module AuthlogicOpenid
         
         klass.class_eval do
           validates_uniqueness_of :openid_identifier, :scope => validations_scope, :if => :using_openid?
+          validates_uniqueness_of :wll_id, :scope => validations_scope, :if => :using_wll?
+          validates_uniqueness_of :fb_user_id, :scope => validations_scope, :if => :using_fb?
           validate :validate_openid
+          validates_uniqueness_of_login_field_options validates_uniqueness_of_login_field_options.merge(:if => :validate_password_with_openid?)
+          validates_length_of_login_field_options validates_length_of_login_field_options.merge(:if => :validate_password_with_openid?)
+          validates_format_of_login_field_options validates_format_of_login_field_options.merge(:if => :validate_password_with_openid?)
           validates_length_of_password_field_options validates_length_of_password_field_options.merge(:if => :validate_password_with_openid?)
           validates_confirmation_of_password_field_options validates_confirmation_of_password_field_options.merge(:if => :validate_password_with_openid?)
           validates_length_of_password_confirmation_field_options validates_length_of_password_confirmation_field_options.merge(:if => :validate_password_with_openid?)
@@ -158,6 +163,14 @@ module AuthlogicOpenid
           respond_to?(:openid_identifier) && !openid_identifier.blank?
         end
         
+        def using_wll?
+          respond_to?(:wll_id) && !wll_id.blank?
+        end
+        
+        def using_fb?
+          respond_to?(:fb_user_id) && !fb_user_id.blank?
+        end
+        
         def openid_complete?
           session_class.controller.params[:open_id_complete] && session_class.controller.params[:for_model]
         end
@@ -167,7 +180,7 @@ module AuthlogicOpenid
         end
         
         def validate_password_with_openid?
-          !using_openid? && require_password?
+          !using_openid? && require_password? && !wll_id && !fb_user_id
         end
     end
   end
