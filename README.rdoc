@@ -99,8 +99,6 @@ In my user_sessions controller, I check if params[:service] is equal to "Faceboo
           return
         end
       end
-      # @user = User.find_or_create_by_fb_user_id(facebook_session.user.id)
-      # @user.profile = current_user.profile if current_user && !@user.profile
     end
   end
 
