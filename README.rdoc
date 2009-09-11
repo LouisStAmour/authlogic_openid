@@ -52,7 +52,7 @@ The first command creates cross-domain receiver files for Facebook callbacks. Th
     end
   end
 
-The :limit => 8 makes the :integer act as a bigint where possible.
+The <tt>:limit => 8</tt> makes the :integer act as a bigint where possible.
 
   rake db:migrate
 
@@ -79,7 +79,38 @@ This assumes routes (and related methods) like:
   map.login_with "login/:service", :controller => "user_sessions", :action => "create"
   map.logout "logout", :controller => "user_sessions", :action => "destroy"
 
-This is perhaps not the smartest way to process Facebook logins, but it does seem to get the job done. I think I'll try refactoring next however, or rethinking this whole use of authlogic. Plus, profile merging is still bugging me.
+In my user_sessions controller, I check if params[:service] is equal to "Facebook", in the same way that I earlier looked for "windows" to process Windows Live ID. The Facebook code is as follows: (Could be improved)
+
+  elsif params[:service].downcase == "facebook"
+    if facebook_session
+      @user_session = UserSession.new
+      @user_session.fb_user_id = facebook_session.user.id # can't be passed via initializer, haven't researched this.
+      if current_user
+        @user = User.new
+        @user.fb_user_id = facebook_session.user.id
+        @user.profile = current_user.profile
+        @user.save do |result|
+          if result
+            flash[:notice] = "Login/Registration successful."
+          else
+            flash[:notice] = "Login/Registration failed."
+          end
+          redirect_to root_url
+          return
+        end
+      end
+      # @user = User.find_or_create_by_fb_user_id(facebook_session.user.id)
+      # @user.profile = current_user.profile if current_user && !@user.profile
+    end
+  end
+
+But wait, you ask, what's <tt>facebook_session</tt>? Well, since Facebooker is tightly integrated with Rails, and since Facebook has lots of potential features, I didn't try to force it to use Authlogic's sessions, and instead used the built-in Facebooker ones in addition to the current_user provided by Authlogic. In my Application controller, I added:
+
+  filter_parameter_logging :fb_sig_friends
+  before_filter :set_facebook_session
+  helper_method :facebook_session
+
+Overall, this is perhaps not the smartest way to process Facebook logins, but it does seem to get the job done. I think I'll try refactoring next however, or rethinking this whole use of authlogic. Plus, profile merging is still bugging me.
 
 Here's some code I used for profiles - on the show profile page:
 
